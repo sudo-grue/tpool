@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include "tpool.h"
 
-#define MAX_WORKERS 50
 // Selected based on lowest CPU usage on my testing machine
 #define HUNDREDTH_SECOND 10000000
 
