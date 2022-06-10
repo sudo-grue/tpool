@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "tpool.h"
 
+#define MAX_WORKERS 50
 #define TENTH_SECOND 100000000
 
 typedef struct job_t
@@ -47,10 +48,20 @@ static void *worker(void *data)
      struct timespec delay = {0, 0};
 
     for (;;) {
+        /*
+        Only a single thread can acquire a lock at once, however, the moment
+        timedwait is reached, the thread that had the lock releases it. This
+        allows another thread to acquire lock, enter, and block on condition.
+        This continues until one of 2 things occur:
+        1) A signal comes in, then one/all threads that recieved the signal will
+           try to reaquire the lock.
+        2) Their personal timer ran out and they attempt to reaquire lock in a
+           FIFO basis.
+        */
         pthread_mutex_lock(&queue->lock);
         clock_gettime(CLOCK_REALTIME, &delay);
         delay.tv_nsec += TENTH_SECOND;
-        pthread_cond_wait(&queue->bell, &queue->lock);
+        pthread_cond_timedwait(&queue->bell, &queue->lock, &delay);
         pthread_mutex_unlock(&queue->lock);
 
         task = queue_extract(queue);
@@ -66,8 +77,8 @@ static void *worker(void *data)
 
 tpool_t *tpool_create(size_t workers)
 {
-    if (!workers || 50 < workers) {
-        fprintf(stderr, "Workers must be in range 1-50\n");
+    if (!workers || MAX_WORKERS < workers) {
+        fprintf(stderr, "Workers must be in range 1-%d\n", MAX_WORKERS);
         return NULL;
     }
 
