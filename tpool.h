@@ -1,7 +1,7 @@
 #ifndef TPOOL_H
 #define TPOOL_H
 
-#include <signal.h> /* for sig_atomic_t /*
+#include <signal.h> /* for sig_atomic_t */
 
 /**
  * @brief Relies on user defined global for thread syncronization shutdown
@@ -11,8 +11,10 @@ extern volatile sig_atomic_t running;
 typedef struct tpool_t tpool_t;
 typedef void *(*job_f) (void *);
 
+#define MAX_WORKERS 50
+
 /**
- * @brief Creates threadpool of 1-50 workers
+ * @brief Creates threadpool of 1-MAX_WORKERS workers
  *
  * @param workers Number of workers
  * @return tpool_t* Thread pool
@@ -37,7 +39,7 @@ int tpool_add_job(tpool_t *pool, job_f job, void *arg);
 void tpool_wait(tpool_t *pool);
 
 /**
- * @brief Forcibaly cancels all threads and joins them if still running
+ * @brief Forcibly cancels all threads and joins them if still running
  *
  * @param pool Thread pool to take action on
  */
