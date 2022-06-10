@@ -6,7 +6,8 @@
 #include "tpool.h"
 
 #define MAX_WORKERS 50
-#define TENTH_SECOND 100000000
+// Selected based on lowest CPU usage on my testing machine
+#define HUNDREDTH_SECOND 10000000
 
 typedef struct job_t
 {
@@ -55,12 +56,12 @@ static void *worker(void *data)
         This continues until one of 2 things occur:
         1) A signal comes in, then one/all threads that recieved the signal will
            try to reaquire the lock.
-        2) Their personal timer ran out and they attempt to reaquire lock in a
+        2) Their personal timer ran out and they attempt to reaquire lock on a
            FIFO basis.
         */
         pthread_mutex_lock(&queue->lock);
         clock_gettime(CLOCK_REALTIME, &delay);
-        delay.tv_nsec += TENTH_SECOND;
+        delay.tv_nsec += HUNDREDTH_SECOND;
         pthread_cond_timedwait(&queue->bell, &queue->lock, &delay);
         pthread_mutex_unlock(&queue->lock);
 
