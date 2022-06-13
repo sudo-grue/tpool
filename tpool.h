@@ -1,3 +1,16 @@
+/**
+ * @file tpool.h
+ * @author Kyle Matuszczak (kyle.l.matuszczak@gmail.com)
+ * @brief A fully independent threadpool library. Library has no memory leaks
+ *        internally, however, the user defined function in tpool_add_job() must
+ *        clean up the arguements passed (if desired), and tpool_destroy() does
+ *        no cleanup unless tpool_wait() was called first.
+ * @version 0.1
+ * @date 2022-06-12
+ *
+ * @copyright Copyright (c) 2022
+ *
+ */
 #ifndef TPOOL_H
 #define TPOOL_H
 
@@ -39,7 +52,7 @@ int tpool_add_job(tpool_t *pool, job_f job, void *arg);
 void tpool_wait(tpool_t *pool);
 
 /**
- * @brief Forcibly cancels all threads and joins them if still running
+ * @brief Forcibly cancels all threads and joins them if still running.
  *
  * @param pool Thread pool to take action on
  */
