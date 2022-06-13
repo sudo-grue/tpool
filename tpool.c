@@ -8,63 +8,58 @@
 // Selected based on lowest CPU usage on my testing machine
 #define HUNDREDTH_SECOND 10000000
 
-typedef struct job_t
+typedef struct task_t
 {
     job_f job;
     void *arg;
-} job_t;
+} task_t;
 
 typedef struct node_t
 {
     struct node_t *next;
-    job_t *job;
+    task_t        *job;
 } node_t;
 
 typedef struct queue_t
 {
-    node_t *head;
-    node_t *tail;
-    pthread_cond_t bell;
+    node_t         *head;
+    node_t         *tail;
+    pthread_cond_t  bell;
     pthread_mutex_t lock;
 } queue_t;
 
 struct tpool_t
 {
-    size_t workers;
-    queue_t *jobs;
-    pthread_t *tids;
+    size_t       workers;
+    queue_t     *jobs;
+    pthread_t   *tids;
 };
 
+
+static void     queue_append(queue_t *queue, task_t *job);
 static queue_t *queue_create(void);
-static void queue_destroy(queue_t **queue);
-static void queue_append(queue_t *queue, job_t *job);
-static job_t *queue_extract(queue_t *queue);
-static void *worker(void *);
+static void     queue_destroy(queue_t **queue);
+static task_t  *queue_extract(queue_t *queue);
+static void    *worker(void *);
+
 
 static void *worker(void *data)
 {
     queue_t *queue = (queue_t *)data;
-    job_t *task = NULL;
-     struct timespec delay = {0, 0};
+    task_t *task = NULL;
+    struct timespec delay = {0, 0};
 
     for (;;) {
-        /*
-        Only a single thread can acquire a lock at once, however, the moment
-        timedwait is reached, the thread that had the lock releases it. This
-        allows another thread to acquire lock, enter, and block on condition.
-        This continues until one of 2 things occur:
-        1) A signal comes in, then one/all threads that recieved the signal will
-           try to reaquire the lock.
-        2) Their personal timer ran out and they attempt to reaquire lock on a
-           FIFO basis.
-        */
         pthread_mutex_lock(&queue->lock);
-        clock_gettime(CLOCK_REALTIME, &delay);
-        delay.tv_nsec += HUNDREDTH_SECOND;
-        pthread_cond_timedwait(&queue->bell, &queue->lock, &delay);
+        {
+            clock_gettime(CLOCK_REALTIME, &delay);
+            delay.tv_nsec += HUNDREDTH_SECOND;
+            pthread_cond_timedwait(&queue->bell, &queue->lock, &delay);
+
+            task = queue_extract(queue);
+        }
         pthread_mutex_unlock(&queue->lock);
 
-        task = queue_extract(queue);
         if (task) {
             task->job(task->arg);
             free(task);
@@ -84,14 +79,14 @@ tpool_t *tpool_create(size_t workers)
 
     tpool_t *pool = calloc(1, sizeof(*pool));
     if (!pool) {
-        perror("tpool_create");
+        perror("tpool_create: pool");
         errno = 0;
         return NULL;
     }
 
     pool->jobs = queue_create();
     if (!pool->jobs) {
-        perror("tpool_create");
+        perror("tpool_create: queue");
         free(pool);
         errno = 0;
         return NULL;
@@ -99,7 +94,7 @@ tpool_t *tpool_create(size_t workers)
 
     pool->tids = calloc(workers, sizeof(pthread_t));
     if (!pool->tids) {
-        perror("tpool_create");
+        perror("tpool_create: threads");
         free(pool->jobs);
         free(pool);
         errno = 0;
@@ -120,9 +115,10 @@ int tpool_add_job(tpool_t *pool, job_f job, void *arg)
         return -1;
     }
 
-    job_t *task = calloc(1, sizeof(*task));
+    task_t *task = calloc(1, sizeof(*task));
     if (!task) {
         perror("tpool_add_job");
+        errno = 0;
         return -1;
     }
     task->job = job;
@@ -201,7 +197,7 @@ static void queue_destroy(queue_t **queue)
     *queue = NULL;
 }
 
-static void queue_append(queue_t *queue, job_t *job)
+static void queue_append(queue_t *queue, task_t *job)
 {
     struct node_t *node = calloc(1, sizeof(*node));
     if (!node) {
@@ -224,23 +220,20 @@ static void queue_append(queue_t *queue, job_t *job)
     pthread_mutex_unlock(&queue->lock);
 }
 
-static job_t *queue_extract(queue_t *queue)
+// No mutex locking because worker already has lock on dequeue
+static task_t *queue_extract(queue_t *queue)
 {
-    job_t *job = NULL;
-    pthread_mutex_lock(&queue->lock);
-    {
-        if (queue->head) {
-            node_t *temp = queue->head;
-            job = temp->job;
-            queue->head = temp->next;
-            if (!queue->head) {
-                queue->tail = NULL;
-            }
-            temp->next = NULL;
-            temp->job = NULL;
-            free(temp);
+    task_t *job = NULL;
+    if (queue->head) {
+        node_t *temp = queue->head;
+        job = temp->job;
+        queue->head = temp->next;
+        if (!queue->head) {
+            queue->tail = NULL;
         }
+        temp->next = NULL;
+        temp->job = NULL;
+        free(temp);
     }
-    pthread_mutex_unlock(&queue->lock);
     return job;
 }
